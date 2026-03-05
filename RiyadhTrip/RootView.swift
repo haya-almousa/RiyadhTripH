@@ -10,6 +10,7 @@ import FirebaseAuth
 
 struct RootView: View {
     @State private var isLoggedIn = (Auth.auth().currentUser != nil)
+    @State private var handle: AuthStateDidChangeListenerHandle?
 
     var body: some View {
         Group {
@@ -20,9 +21,15 @@ struct RootView: View {
             }
         }
         .onAppear {
-            // يراقب تغيّر حالة الدخول تلقائي
-            Auth.auth().addStateDidChangeListener { _, user in
+            guard handle == nil else { return }
+            handle = Auth.auth().addStateDidChangeListener { _, user in
                 isLoggedIn = (user != nil)
+            }
+        }
+        .onDisappear {
+            if let handle {
+                Auth.auth().removeStateDidChangeListener(handle)
+                self.handle = nil
             }
         }
     }

@@ -16,7 +16,7 @@ final class SignInWithAppleManager: NSObject {
 
     private var currentNonce: String?
 
-    func startSignInWithAppleFlow() async throws {
+    func startSignInWithAppleFlow() async throws -> AuthDataResult {
         let nonce = randomNonceString()
         currentNonce = nonce
 
@@ -24,15 +24,29 @@ final class SignInWithAppleManager: NSObject {
         request.requestedScopes = [.fullName, .email]
         request.nonce = sha256(nonce)
 
-        try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { continuation in
             let controller = ASAuthorizationController(authorizationRequests: [request])
+
             controller.delegate = Delegate(
                 nonce: nonce,
-                onSuccess: { credential in
+                onSuccess: { credential, fullName, email in
                     Task {
                         do {
-                            _ = try await Auth.auth().signIn(with: credential)
-                            continuation.resume()
+                            let result = try await Auth.auth().signIn(with: credential)
+
+                            if let fullName {
+                                let formatter = PersonNameComponentsFormatter()
+                                let nameString = formatter.string(from: fullName)
+                                if !nameString.isEmpty {
+                                    UserDefaults.standard.set(nameString, forKey: "apple_name")
+                                }
+                            }
+
+                            if let email {
+                                UserDefaults.standard.set(email, forKey: "apple_email")
+                            }
+
+                            continuation.resume(returning: result)
                         } catch {
                             continuation.resume(throwing: error)
                         }
@@ -42,6 +56,7 @@ final class SignInWithAppleManager: NSObject {
                     continuation.resume(throwing: error)
                 }
             )
+
             controller.presentationContextProvider = PresentationContextProvider()
             controller.performRequests()
         }
@@ -50,10 +65,14 @@ final class SignInWithAppleManager: NSObject {
 
 private final class Delegate: NSObject, ASAuthorizationControllerDelegate {
     let nonce: String
-    let onSuccess: (AuthCredential) -> Void
+    let onSuccess: (AuthCredential, PersonNameComponents?, String?) -> Void
     let onFailure: (Error) -> Void
 
-    init(nonce: String, onSuccess: @escaping (AuthCredential) -> Void, onFailure: @escaping (Error) -> Void) {
+    init(
+        nonce: String,
+        onSuccess: @escaping (AuthCredential, PersonNameComponents?, String?) -> Void,
+        onFailure: @escaping (Error) -> Void
+    ) {
         self.nonce = nonce
         self.onSuccess = onSuccess
         self.onFailure = onFailure
@@ -75,7 +94,8 @@ private final class Delegate: NSObject, ASAuthorizationControllerDelegate {
             rawNonce: nonce,
             fullName: appleIDCredential.fullName
         )
-        onSuccess(credential)
+
+        onSuccess(credential, appleIDCredential.fullName, appleIDCredential.email)
     }
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
