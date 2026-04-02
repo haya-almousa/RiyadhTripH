@@ -6,12 +6,13 @@
 //
 
 import SwiftUI
-import FirebaseCore
+import Firebase
 
 @main
 struct RiyadhTripApp: App {
     init() {
         FirebaseApp.configure()
+        print("Configured Firebase")
     }
 
     var body: some Scene {

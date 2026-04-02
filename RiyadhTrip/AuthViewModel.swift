@@ -19,9 +19,10 @@ final class AuthViewModel: ObservableObject {
 
     @Published var isLoading: Bool = false
     @Published var errorMessage: String = ""
+    @Published var infoMessage: String = ""
 
     private let db = Firestore.firestore()
-    private let apple = SignInWithAppleManager()
+  //  private let apple = SignInWithAppleManager()//
 
     func signInEmail() async {
         errorMessage = ""
@@ -55,13 +56,38 @@ final class AuthViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let result = try await apple.startSignInWithAppleFlow()
-            let uid = result.user.uid
+           // let result = try await apple.startSignInWithAppleFlow()
+           // let uid = result.user.uid
 
             let savedName = UserDefaults.standard.string(forKey: "apple_name")
-            let savedEmail = result.user.email ?? UserDefaults.standard.string(forKey: "apple_email")
+          //  let savedEmail = result.user.email ?? UserDefaults.standard.string(forKey: "apple_email")
 
-            try await upsertUserDocumentIfNeeded(uid: uid, email: savedEmail, name: savedName)
+         //   try await upsertUserDocumentIfNeeded(uid: uid, email: savedEmail, name: savedName)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func resetPassword() async {
+        errorMessage = ""
+        infoMessage = ""
+        guard !email.isEmpty else {
+            errorMessage = "يرجى إدخال البريد الإلكتروني"
+            return
+        }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                Auth.auth().sendPasswordReset(withEmail: email) { error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: ())
+                    }
+                }
+            }
+            infoMessage = "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني."
         } catch {
             errorMessage = error.localizedDescription
         }
